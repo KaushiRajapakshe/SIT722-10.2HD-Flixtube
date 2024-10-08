@@ -1,0 +1,101 @@
+# 
+# GitHub Actions workflow.
+#
+# Automatically deploys the python microservice to Kubernetes on push to any branch. 
+# For real use you might want to restrict this to the "prod" branch.
+#
+
+name: Terraform integration
+
+on:
+  #
+  # Allows deployment to be invoked manually through the GitHub Actions user interface.
+  #
+  workflow_dispatch: 
+  
+jobs:
+
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      
+      # Checks-out your repository under $GITHUB_WORKSPACE.
+      - uses: actions/checkout@v3
+
+      # AWS login 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Set up Terraform
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ vars.TF_VERSION }}
+
+      # Initialize Terraform
+      - name: Terraform Init
+        run: terraform init
+        working-directory: scripts/terraform
+
+      # Run Terraform plan
+      - name: Terraform Plan
+        run: terraform plan
+        working-directory: scripts/terraform
+        continue-on-error: true
+
+      # Optionally, apply Terraform changes (use cautiously in production!)
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve
+        working-directory: scripts/terraform
+        continue-on-error: true
+      
+      # Upload Terraform state file to GIT
+      - name: Upload Terraform state file
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-state-file
+          path: ./scripts/terraform/terraform.tfstate
+
+      # Install required dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt install gh -y
+          sudo apt install jq -y
+
+      # Login tot GitHub-CLI using token
+      - name: GitHub-Cli login
+        run: |
+          echo "${{ secrets.TOKEN }}" | gh auth login --with-token
+
+      # Refresh terraform state
+      - name: Refresh terraform state
+        run: terraform refresh
+
+      # Set Container registry, registry username, password and kubernetes config for AWS
+      - name: Set Secrets
+        run: |
+          # Set AWS Container Registry (ECR) URL
+          aws_account_id=$(aws sts get-caller-identity --query "Account" --output text)
+          aws_region=${{ vars.AWS_REGION }}
+          aws_ecr_url="$aws_account_id.dkr.ecr.$aws_region.amazonaws.com"
+          gh secret set CONTAINER_REGISTRY --body "$aws_ecr_url"
+
+          # Get AWS ECR credentials
+          ecr_password=$(aws ecr get-login-password --region $aws_region)
+          gh secret set REGISTRY_UN --body "AWS"
+          gh secret set REGISTRY_PW --body "$ecr_password"
+
+          # Set up AWS EKS Kubernetes credentials
+          aws eks update-kubeconfig --region $aws_region --name ${{ secrets.EKS_CLUSTER_NAME }} --role-arn arn:aws:iam::$aws_account_id:role/eks_cluster_role
+
+          # Set Kubeconfig secret
+          gh secret set KUBE_CONFIG --body "$(cat ~/.kube/config | base64 --wrap=0)"

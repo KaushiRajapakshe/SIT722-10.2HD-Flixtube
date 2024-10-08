@@ -1,0 +1,56 @@
+# 
+# GitHub Actions workflow.
+#
+# Automatically deploys the python microservice to Kubernetes on push to any branch. 
+# For real use you might want to restrict this to the "prod" branch.
+#
+
+name: Terraform destoy
+
+on:
+  #
+  # Allows deployment to be invoked manually through the GitHub Actions user interface.
+  #
+  workflow_dispatch: 
+
+jobs:
+
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      
+      # Checks-out your repository under $GITHUB_WORKSPACE.
+      - uses: actions/checkout@v3
+      
+      # AWS configuration using credentials from GitHub Secrets
+      - name: AWS Configure
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Set up Terraform
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6
+
+      # Initialize Terraform
+      - name: Initialize Terraform
+        run: terraform init
+        working-directory: scripts/terraform
+
+      # Output Terraform Plan
+      - name: Plan Terraform Destroy
+        run: terraform plan -destroy -out=tfplan
+        working-directory: scripts/terraform  
+
+      # Destroy Terraform
+      - name: Apply Terraform Destroy
+        run: terraform apply -auto-approve tfplan
+        working-directory: scripts/terraform  

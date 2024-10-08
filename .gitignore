@@ -1,0 +1,9 @@
+node_modules/
+todo.txt
+*.bak
+mock-storage/storage
+kubeconfig.txt
+scripts/terraform/.terraform
+scripts/terraform/.terraform.lock.hcl
+scripts/terraform/terraform.tfstate
+scripts/terraform/terraform.tfstate.backup

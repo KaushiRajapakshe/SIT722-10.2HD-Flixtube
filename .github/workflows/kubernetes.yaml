@@ -1,0 +1,69 @@
+# 
+# GitHub Actions workflow.
+#
+# Deploy to Kubernetes.
+#
+
+name: Kubernetes
+
+on:
+  #
+  # Allows deployment to be invoked manually through the GitHub Actions user interface.
+  #
+  workflow_dispatch: 
+
+jobs:
+
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      
+      # Checks-out your repository under $GITHUB_WORKSPACE.
+      - uses: actions/checkout@v3
+
+      # AWS configuration using credentials from GitHub Secrets
+      - name: AWS Configure
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      #
+      # Installs Kubectl and connects it to the cluster.
+      #
+      # https://github.com/marketplace/actions/kubernetes-cli-kubectl
+      #
+      - uses: tale/kubectl-action@v1
+        with:
+          base64-kube-config: ${{ secrets.KUBE_CONFIG }}
+          kubectl-version: v1.24.2
+        
+      - name: Wait for All Pods to Be Ready
+        run: |
+          kubectl -n kube-system patch deployment coredns -p '{"spec": {"template": {"spec": {"nodeSelector": {"eks.amazonaws.com/compute-type": "fargate"}}}}}'
+          kubectl -n kube-system patch deployment coredns -p '{"spec": {"template": {"spec": {"tolerations": [{"key":"eks.amazonaws.com/compute-type","operator":"Equal","value":"fargate","effect":"NoSchedule"}]}}}}'
+          kubectl rollout restart deployment coredns -n kube-system
+          kubectl get configmap aws-auth -n kube-system -o yaml
+          kubectl logs -n kube-system -l k8s-app=kube-dns
+          kubectl describe pod -l k8s-app=kube-dns -n kube-system
+
+      - name: Test
+        run: kubectl get events -n kube-system
+
+      - name: Test kubectl pods
+        run: kubectl get pods
+
+      - name: Test kubectl deployments
+        run: kubectl get deployments
+
+      - name: Test kubectl services
+        run: kubectl get services
+
+      # 
+      # Test Access.
+      #
+      - name: Test kubectl access
+        run: kubectl get nodes
+
