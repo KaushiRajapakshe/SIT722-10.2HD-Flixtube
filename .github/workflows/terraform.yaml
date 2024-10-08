@@ -80,6 +80,16 @@ jobs:
       - name: Refresh terraform state
         run: terraform refresh
 
+      # SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id KUBE_CONFIG --query SecretString --output text)
+
+      # AWS Secrets Manager
+      # aws secretsmanager put-secret-value --secret-id CONTAINER_REGISTRY --secret-string "{\"value\":\"$aws_ecr_url\"}" --region us-east-1
+      # aws secretsmanager put-secret-value --secret-id REGISTRY_UN --secret-string "{\"value\":\"AWS\"}" --region us-east-1
+      # aws secretsmanager put-secret-value --secret-id REGISTRY_PW --secret-string "{\"value\":\"$ecr_password\"}" --region us-east-1
+      # aws secretsmanager put-secret-value --secret-id EKS_CLUSTER_NAME --secret-string "{\"value\":\"${{ secrets.EKS_CLUSTER_NAME }}\"}" --region us-east-1
+      # aws secretsmanager put-secret-value --secret-id KUBE_CONFIG --secret-string "{\"value\":\"$(cat ~/.kube/config | base64 --wrap=0)\"}" --region us-east-1
+      
+
       # Set Container registry, registry username, password and kubernetes config for AWS
       - name: Set Secrets
         run: |
